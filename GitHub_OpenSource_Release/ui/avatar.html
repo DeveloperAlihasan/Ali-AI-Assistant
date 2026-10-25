@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <title>Stonic AI // 3D Particle Humanoid & Switch Dock</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: radial-gradient(circle at center, #061126 0%, #02040a 100%);
+            font-family: 'Segoe UI', sans-serif; user-select: none;
+        }
+        #canvas-container { position: absolute; width: 100%; height: 100%; z-index: 1; }
+        #ui-overlay {
+            position: absolute; width: 100%; height: 100%; z-index: 10;
+            display: flex; flex-direction: column; justify-content: space-between;
+            box-sizing: border-box; padding: 28px 36px; pointer-events: none;
+        }
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .system-title {
+            color: #00F0FF; font-family: monospace; font-size: 16px; font-weight: bold;
+            letter-spacing: 3px; text-shadow: 0 0 12px rgba(0,240,255,0.7);
+        }
+        .engine-badge {
+            color: #38BDF8; font-family: monospace; font-size: 12px;
+            background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.35);
+            padding: 5px 12px; border-radius: 14px; margin-left: 12px;
+        }
+        .right-controls {
+            display: flex; align-items: center; gap: 12px; pointer-events: auto;
+        }
+        .status-badge {
+            color: #FFB703; font-family: monospace; font-size: 13px; letter-spacing: 1.5px;
+            background: rgba(255,183,3,0.12); border: 1px solid rgba(255,183,3,0.4);
+            padding: 7px 16px; border-radius: 20px; text-shadow: 0 0 8px rgba(255,183,3,0.6);
+        }
+        .ctrl-btn {
+            font-family: 'Segoe UI', sans-serif; font-size: 13px; font-weight: 600;
+            padding: 7px 15px; border-radius: 20px; cursor: pointer;
+            transition: all 0.2s ease; border: 1px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(8px);
+        }
+        .btn-mic-on {
+            background: rgba(16, 185, 129, 0.2); color: #34D399; border-color: #10B981;
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+        }
+        .btn-mic-off {
+            background: rgba(245, 158, 11, 0.2); color: #FBBF24; border-color: #F59E0B;
+        }
+        .btn-bg {
+            background: rgba(14, 165, 233, 0.18); color: #38BDF8; border-color: rgba(56, 189, 248, 0.45);
+        }
+        .btn-bg:hover { background: rgba(14, 165, 233, 0.35); }
+        .btn-power-off {
+            background: rgba(239, 68, 68, 0.22); color: #F87171; border-color: rgba(239, 68, 68, 0.55);
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+        }
+        .btn-power-off:hover { background: rgba(239, 68, 68, 0.45); color: #FFFFFF; }
+        .bottom-area { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 10px; }
+        .subtitle {
+            color: #FFFFFF; font-size: 20px; font-weight: 500;
+            background: rgba(8, 14, 28, 0.82); display: inline-block;
+            padding: 14px 30px; border-radius: 35px;
+            border: 1px solid rgba(0, 240, 255, 0.35);
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.15);
+            backdrop-filter: blur(10px); max-width: 82%; text-align: center;
+        }
+        .agent-town-hud {
+            display: flex; gap: 12px; background: rgba(5, 10, 20, 0.75);
+            padding: 8px 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+        }
+        .agent-pill {
+            font-family: monospace; font-size: 12px; color: #94A3B8;
+            padding: 4px 10px; border-radius: 10px; background: rgba(255,255,255,0.04);
+            transition: all 0.3s ease;
+        }
+        .agent-pill.active {
+            color: #4ADE80; background: rgba(74, 222, 128, 0.15);
+            border: 1px solid rgba(74, 222, 128, 0.4); font-weight: bold;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.25);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div id="ui-overlay">
+        <div class="header">
+            <div>
+                <span class="system-title" id="agent-label">STONIC // ALI ACTIVE</span>
+                <span class="engine-badge" id="engine-label">TRI-CLOUD: READY</span>
+                <span class="engine-badge" id="persona-badge" style="border-color: rgba(0, 240, 255, 0.4); color: #00F0FF;">👤 এআই এজেন্ট: আলী</span>
+            </div>
+            <div class="right-controls">
+                <div class="status-badge" id="status-label">STATUS: LISTENING</div>
+                <button class="ctrl-btn btn-mic-on" id="mic-switch-btn" onclick="toggleMicSwitch()">🟢 সুইচ: ON</button>
+                <button class="ctrl-btn btn-bg" onclick="sendToBackground()">🔽 ব্যাকগ্রাউন্ডে রাখুন</button>
+                <button class="ctrl-btn btn-power-off" onclick="powerOffApp()">⏻ অফ করুন (CLOSE)</button>
+            </div>
+        </div>
+        <div class="bottom-area">
+            <div class="subtitle" id="subtitle-box">"আলী" বা "সম্পা" বলে অর্ডার দিন...</div>
+            <div class="agent-town-hud">
+                <div class="agent-pill" id="pill-autopilot">🤖 AutoPilot: Idle</div>
+                <div class="agent-pill" id="pill-coder">💻 Coder: Idle</div>
+                <div class="agent-pill" id="pill-researcher">📄 Researcher: Idle</div>
+                <div class="agent-pill" id="pill-comms">💬 Comms: Idle</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let micOn = true;
+        function toggleMicSwitch() {
+            micOn = !micOn;
+            const btn = document.getElementById('mic-switch-btn');
+            if (micOn) {
+                btn.className = "ctrl-btn btn-mic-on";
+                btn.innerText = "🟢 সুইচ: ON";
+                document.getElementById('status-label').innerText = "STATUS: LISTENING";
+            } else {
+                btn.className = "ctrl-btn btn-mic-off";
+                btn.innerText = "⏸️ সুইচ: OFF (মিউট)";
+                document.getElementById('status-label').innerText = "STATUS: PAUSED";
+            }
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.set_mic_switch(micOn);
+            }
+        }
+
+        function sendToBackground() {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.minimize_to_background();
+            }
+        }
+
+        function powerOffApp() {
+            if (window.pywebview && window.pywebview.api) {
+                window.pywebview.api.close_app_completely();
+            }
+        }
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 0.05, 2.55);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        const totalDots = 11000;
+        const headGeo = new THREE.BufferGeometry();
+        const positions = new Float32Array(totalDots * 3);
+        const targetPositions = new Float32Array(totalDots * 3);
+        const colors = new Float32Array(totalDots * 3);
+
+        let p = 0;
+        const rings = 85;
+        const dotsPerRing = 100;
+
+        for (let rIdx = 0; rIdx < rings; rIdx++) {
+            let t = rIdx / (rings - 1);
+            let y = -0.85 + t * 1.60;
+
+            for (let dIdx = 0; dIdx < dotsPerRing; dIdx++) {
+                let angle = (dIdx / dotsPerRing) * Math.PI * 2;
+                let rx = 0, rz = 0;
+
+                if (y > 0.05) {
+                    let headT = (y - 0.05) / 0.70;
+                    let baseRadius = Math.sin(headT * Math.PI) * 0.34 + 0.08 * Math.sin(headT * Math.PI * 0.5);
+                    if (headT < 0.25) baseRadius *= (0.65 + headT * 1.4);
+                    rx = baseRadius * 0.86;
+                    rz = baseRadius * 0.98;
+
+                    let frontFactor = Math.max(0, Math.cos(angle - Math.PI / 2));
+                    if (headT > 0.32 && headT < 0.62 && frontFactor > 0.85) {
+                        rz += Math.pow(frontFactor, 8) * 0.065;
+                    }
+                    if (headT > 0.50 && headT < 0.64 && frontFactor > 0.5 && frontFactor < 0.92) {
+                        rz -= 0.025;
+                    }
+                } else if (y > -0.22) {
+                    let neckT = (y + 0.22) / 0.27;
+                    rx = 0.15 + (1 - neckT) * 0.03;
+                    rz = 0.14;
+                } else {
+                    let bodyT = (-0.22 - y) / 0.63;
+                    rx = 0.18 + Math.pow(bodyT, 0.7) * 0.78;
+                    rz = 0.15 + bodyT * 0.16;
+                }
+
+                let tx = Math.cos(angle) * rx + (Math.random() - 0.5) * 0.008;
+                let ty = y + (Math.random() - 0.5) * 0.006;
+                let tz = Math.sin(angle) * rz + (Math.random() - 0.5) * 0.008;
+
+                positions[p] = (Math.random() - 0.5) * 4.5;
+                positions[p+1] = (Math.random() - 0.5) * 4.5;
+                positions[p+2] = (Math.random() - 0.5) * 4.5;
+
+                targetPositions[p] = tx;
+                targetPositions[p+1] = ty;
+                targetPositions[p+2] = tz;
+
+                let faceCenterDist = Math.sqrt(tx*tx + Math.pow(ty - 0.36, 2));
+                let isFront = tz > 0;
+                let isNeckCore = (ty < 0.05 && ty > -0.45 && Math.abs(tx) < 0.09 && isFront);
+
+                if ((faceCenterDist < 0.19 && isFront) || isNeckCore) {
+                    colors[p] = 1.0; colors[p+1] = 0.52; colors[p+2] = 0.08;
+                } else {
+                    colors[p] = 0.0; colors[p+1] = 0.88; colors[p+2] = 1.0;
+                }
+                p += 3;
+            }
+        }
+
+        while (p < totalDots * 3) {
+            let a = Math.random() * Math.PI * 2;
+            let rad = 0.35 + Math.random() * 0.35;
+            let hy = -0.3 + Math.random() * 1.25;
+            positions[p] = (Math.random() - 0.5) * 5;
+            positions[p+1] = (Math.random() - 0.5) * 5;
+            positions[p+2] = (Math.random() - 0.5) * 5;
+            targetPositions[p] = Math.cos(a) * rad;
+            targetPositions[p+1] = hy;
+            targetPositions[p+2] = (Math.random() - 0.5) * 0.4;
+            colors[p] = 0.0; colors[p+1] = 0.75; colors[p+2] = 1.0;
+            p += 3;
+        }
+
+        headGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        headGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const headMat = new THREE.PointsMaterial({
+            size: 0.013, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending
+        });
+
+        const humanoidGroup = new THREE.Group();
+        const humanoidMesh = new THREE.Points(headGeo, headMat);
+        humanoidGroup.add(humanoidMesh);
+        scene.add(humanoidGroup);
+
+        const waveDots = 3500;
+        const waveGeo = new THREE.BufferGeometry();
+        const wavePos = new Float32Array(waveDots * 3);
+        const waveCol = new Float32Array(waveDots * 3);
+        for (let i = 0; i < waveDots * 3; i += 3) {
+            let wx = (Math.random() - 0.5) * 5.2;
+            let wz = (Math.random() - 0.5) * 1.5 - 0.6;
+            let wy = Math.sin(wx * 2.5) * 0.25 - 0.35 + (Math.random() - 0.5) * 0.2;
+            wavePos[i] = wx; wavePos[i+1] = wy; wavePos[i+2] = wz;
+            if (Math.random() > 0.82) {
+                waveCol[i] = 1.0; waveCol[i+1] = 0.6; waveCol[i+2] = 0.1;
+            } else {
+                waveCol[i] = 0.0; waveCol[i+1] = 0.55; waveCol[i+2] = 0.95;
+            }
+        }
+        waveGeo.setAttribute('position', new THREE.BufferAttribute(wavePos, 3));
+        waveGeo.setAttribute('color', new THREE.BufferAttribute(waveCol, 3));
+        const waveMesh = new THREE.Points(waveGeo, new THREE.PointsMaterial({
+            size: 0.012, vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending
+        }));
+        scene.add(waveMesh);
+
+        let clock = new THREE.Clock();
+        let currentStatus = "LISTENING";
+        let nodTimer = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            let t = clock.getElapsedTime();
+
+            let posArr = humanoidMesh.geometry.attributes.position.array;
+            for (let i = 0; i < totalDots * 3; i += 3) {
+                let tx = targetPositions[i];
+                let ty = targetPositions[i+1];
+                let tz = targetPositions[i+2];
+
+                if (currentStatus === "SPEAKING" && ty > 0.15 && ty < 0.45 && tz > 0.1) {
+                    tz += Math.sin(t * 18 + ty * 12) * 0.022;
+                }
+
+                posArr[i] += (tx - posArr[i]) * 0.07;
+                posArr[i+1] += (ty - posArr[i+1]) * 0.07;
+                posArr[i+2] += (tz - posArr[i+2]) * 0.07;
+            }
+            humanoidMesh.geometry.attributes.position.needsUpdate = true;
+
+            if (currentStatus === "LISTENING") {
+                humanoidGroup.rotation.y = Math.sin(t * 0.5) * 0.08;
+                humanoidGroup.rotation.z = THREE.MathUtils.lerp(humanoidGroup.rotation.z, 0.05, 0.05);
+                humanoidGroup.rotation.x = THREE.MathUtils.lerp(humanoidGroup.rotation.x, 0.03, 0.05);
+            } else if (currentStatus === "SPEAKING") {
+                humanoidGroup.rotation.y = Math.sin(t * 1.5) * 0.12;
+                humanoidGroup.rotation.x = Math.sin(t * 3.2) * 0.04;
+                humanoidGroup.rotation.z = Math.cos(t * 1.1) * 0.03;
+            } else if (currentStatus === "NODDING") {
+                humanoidGroup.rotation.x = Math.sin(t * 10) * 0.12;
+                nodTimer -= 0.02;
+                if (nodTimer <= 0) currentStatus = "SPEAKING";
+            } else {
+                humanoidGroup.rotation.y = Math.sin(t * 0.8) * 0.15;
+                humanoidGroup.rotation.x = -0.05;
+            }
+
+            humanoidGroup.position.y = Math.sin(t * 2.2) * 0.012;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        function updateFromPython(agentName, text, status, engineName) {
+            const agentLabel = document.getElementById('agent-label');
+            const subtitleBox = document.getElementById('subtitle-box');
+            const statusLabel = document.getElementById('status-label');
+            const engineLabel = document.getElementById('engine-label');
+
+            if (agentLabel) agentLabel.innerText = "STONIC // " + agentName.toUpperCase() + " ACTIVE";
+            const personaBadge = document.getElementById('persona-badge');
+            if (personaBadge) personaBadge.innerText = "👤 এআই এজেন্ট: " + agentName;
+            if (subtitleBox) subtitleBox.innerText = text;
+            if (statusLabel) statusLabel.innerText = "STATUS: " + status;
+            if (engineName && engineLabel) engineLabel.innerText = engineName;
+
+            if (status === "NODDING") nodTimer = 1.2;
+            currentStatus = status;
+
+            let colAttr = humanoidMesh.geometry.attributes.color.array;
+            let isShampa = (agentName === "সম্পা");
+            for (let i = 0; i < totalDots * 3; i += 3) {
+                if (colAttr[i] < 0.95) {
+                    colAttr[i] = isShampa ? 0.95 : 0.0;
+                    colAttr[i+1] = isShampa ? 0.15 : 0.88;
+                    colAttr[i+2] = isShampa ? 0.65 : 1.0;
+                }
+            }
+            humanoidMesh.geometry.attributes.color.needsUpdate = true;
+        }
+
+        function setSubAgentBadge(pillId, labelText, isActive) {
+            const el = document.getElementById(pillId);
+            if (el) {
+                el.innerText = labelText;
+                el.className = isActive ? "agent-pill active" : "agent-pill";
+            }
+        }
+
+        function triggerMaterializeEffect() {
+            let posArr = humanoidMesh.geometry.attributes.position.array;
+            for (let i = 0; i < totalDots * 3; i++) {
+                posArr[i] = (Math.random() - 0.5) * 4.0;
+            }
+            humanoidMesh.geometry.attributes.position.needsUpdate = true;
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
